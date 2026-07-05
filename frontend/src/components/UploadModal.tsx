@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { X, UploadCloud } from 'lucide-react'
 import { uploadPdf, UploadResponse } from '../api/client'
 
@@ -13,15 +13,21 @@ export function UploadModal({ open, onClose }: UploadModalProps) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<UploadResponse | null>(null)
 
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0] ?? null
-    setFile(selected)
-    setResult(null)
-    setStatus(selected ? selected.name : 'Choose a PDF to upload')
-  }, [])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selected = e.target.files?.[0] ?? null
+      setFile(selected)
+      setResult(null)
+      setStatus(selected ? selected.name : 'Choose a PDF to upload')
+    },
+    []
+  )
 
   const handleUpload = useCallback(async () => {
     if (!file) return
+
     setLoading(true)
     setStatus('Uploading...')
 
@@ -29,20 +35,29 @@ export function UploadModal({ open, onClose }: UploadModalProps) {
       const response = await uploadPdf(file)
       setResult(response)
       setStatus('Upload successful')
+
+      // close modal after short delay
+      setTimeout(() => {
+        onClose()
+        setFile(null)
+        setStatus('Choose a PDF to upload')
+        setResult(null)
+      }, 800)
+
     } catch (error) {
       console.error(error)
       setStatus('Upload failed. Please try again.')
     } finally {
       setLoading(false)
     }
-  }, [file])
+  }, [file, onClose])
 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/80 px-4 py-6 backdrop-blur-sm">
+    <div style={{ background: "red", position: "fixed", inset: 0, zIndex: 9999 }}>
       <div className="w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl shadow-slate-950/40">
-        
+
         {/* HEADER */}
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -79,6 +94,7 @@ export function UploadModal({ open, onClose }: UploadModalProps) {
             </span>
 
             <input
+              ref={fileInputRef}
               id="pdf-upload"
               type="file"
               accept="application/pdf"
@@ -94,8 +110,14 @@ export function UploadModal({ open, onClose }: UploadModalProps) {
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
-                disabled={!file || loading}
-                onClick={handleUpload}
+                onClick={() => {
+                  if (!file) {
+                    fileInputRef.current?.click()
+                    return
+                  }
+                  handleUpload()
+                }}
+                disabled={loading}
                 className="rounded-full bg-sky-500 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
               >
                 {loading ? 'Uploading…' : 'Upload PDF'}

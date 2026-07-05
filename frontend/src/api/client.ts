@@ -2,9 +2,6 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: 'http://localhost:8000',
-  headers: {
-    'Content-Type': 'application/json',
-  },
 })
 
 export interface UploadResponse {
@@ -54,24 +51,42 @@ export interface DocumentChunk {
   metadata: Record<string, unknown>
 }
 
+/**
+ * Upload PDF (RAG ingestion)
+ */
 export async function uploadPdf(file: File) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const response = await api.post<UploadResponse>('/upload/pdf', formData)
+  const response = await api.post<UploadResponse>(
+    '/upload/pdf',
+    formData
+  )
+
   return response.data
 }
 
+/**
+ * Chat with RAG system
+ */
 export async function postChat(request: ChatRequest) {
   const response = await api.post<ChatResponse>('/chat/', request)
   return response.data
 }
 
+/**
+ * Get all uploaded documents
+ */
 export async function getDocuments() {
-  const response = await api.get<{ documents: DocumentSummary[] }>('/documents/')
+  const response = await api.get<{ documents: DocumentSummary[] }>(
+    '/documents/'
+  )
   return response.data.documents
 }
 
+/**
+ * Get chunks for a document
+ */
 export async function getDocumentChunks(docId: string) {
   const response = await api.get<{ doc_id: string; chunks: DocumentChunk[] }>(
     `/documents/${docId}`

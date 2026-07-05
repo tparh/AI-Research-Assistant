@@ -202,3 +202,5 @@ http://localhost:5173
 ## 👨‍💻 Author
 
 GitHub: https://github.com/tparh
+
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000

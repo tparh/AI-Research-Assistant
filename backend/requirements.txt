@@ -10,3 +10,6 @@ pypdf
 sqlalchemy
 python-multipart
 pydantic-settings
+
+langchain-text-splitters==1.1.2
+pydantic==2.13.4

@@ -1,158 +1,190 @@
-import { useCallback, useState, useRef } from 'react'
-import { X, UploadCloud } from 'lucide-react'
-import { uploadPdf, UploadResponse } from '../api/client'
+import { useCallback, useRef, useState } from 'react'
+import {
+  AlertCircle,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  UploadCloud,
+  X,
+} from 'lucide-react'
+import { getApiErrorMessage, uploadPdf } from '../api/client'
+import type { UploadResponse } from '../types/api'
 
 interface UploadModalProps {
   open: boolean
   onClose: () => void
+  onUploadComplete?: (result: UploadResponse) => void
 }
 
-export function UploadModal({ open, onClose }: UploadModalProps) {
+export function UploadModal({ open, onClose, onUploadComplete }: UploadModalProps) {
   const [file, setFile] = useState<File | null>(null)
-  const [status, setStatus] = useState<string>('Choose a PDF to upload')
+  const [status, setStatus] = useState<string>('Select a PDF to import')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<UploadResponse | null>(null)
-
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selected = e.target.files?.[0] ?? null
-      setFile(selected)
-      setResult(null)
-      setStatus(selected ? selected.name : 'Choose a PDF to upload')
-    },
-    []
-  )
+  const reset = useCallback(() => {
+    setFile(null)
+    setStatus('Select a PDF to import')
+    setResult(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }, [])
+
+  const selectFile = useCallback((selected: File | null) => {
+    setFile(selected)
+    setResult(null)
+    if (selected && !selected.name.toLowerCase().endsWith('.pdf')) {
+      setFile(null)
+      setStatus('Only .pdf files are accepted by the backend service.')
+      return
+    }
+    setStatus(selected ? selected.name : 'Select a PDF to import')
+  }, [])
 
   const handleUpload = useCallback(async () => {
     if (!file) return
 
     setLoading(true)
-    setStatus('Uploading...')
+    setStatus('Processing PDF through PyPDF extraction, text chunking, and embedding...')
 
     try {
       const response = await uploadPdf(file)
       setResult(response)
-      setStatus('Upload successful')
 
-      // close modal after short delay
-      setTimeout(() => {
-        onClose()
-        setFile(null)
-        setStatus('Choose a PDF to upload')
-        setResult(null)
-      }, 800)
-
+      if (response.success) {
+        setStatus('Document parsed and indexed in ChromaDB.')
+        onUploadComplete?.(response)
+        window.setTimeout(() => {
+          onClose()
+          reset()
+        }, 1200)
+      } else {
+        setStatus(response.message || 'Upload processing error occurred.')
+      }
     } catch (error) {
-      console.error(error)
-      setStatus('Upload failed. Please try again.')
+      const message = getApiErrorMessage(
+        error,
+        'Upload failed. Ensure backend FastAPI service is running on port 8000.',
+      )
+      setResult({ success: false, doc_id: null, message })
+      setStatus(message)
     } finally {
       setLoading(false)
     }
-  }, [file, onClose])
+  }, [file, onClose, onUploadComplete, reset])
 
   if (!open) return null
 
   return (
-    <div style={{ background: "red", position: "fixed", inset: 0, zIndex: 9999 }}>
-      <div className="w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl shadow-slate-950/40">
-
-        {/* HEADER */}
-        <div className="flex items-start justify-between gap-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-xl border border-slate-800 bg-[#0f1626] p-6 shadow-2xl">
+        {/* Header */}
+        <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.28em] text-sky-400/80">
-              Upload document
+            <h2 className="text-base font-bold text-white tracking-tight">Import Research PDF</h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Ingests text with PyPDF and stores 384-dimensional vectors in ChromaDB.
             </p>
-            <h2 className="mt-3 text-2xl font-semibold text-white">
-              Upload a PDF for semantic search
-            </h2>
           </div>
-
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-700 bg-slate-950 p-3 text-slate-300 hover:text-white"
+            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* DROP AREA */}
-        <div className="mt-8 grid gap-5">
-
+        {/* Drop Zone */}
+        <div className="mt-5 space-y-3">
           <label
-            htmlFor="pdf-upload"
-            className="flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-slate-700 bg-slate-950/70 p-8 text-center text-slate-400 transition hover:border-slate-500 hover:bg-slate-900/80"
+            htmlFor="pdf-file-input"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              selectFile(e.dataTransfer.files?.[0] ?? null)
+            }}
+            className={`flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition ${
+              file
+                ? 'border-emerald-500/60 bg-emerald-950/20'
+                : 'border-slate-700 bg-slate-900/50 hover:border-slate-500 hover:bg-slate-900'
+            }`}
           >
-            <UploadCloud size={38} className="text-sky-400" />
-            <span className="mt-4 text-base text-slate-100">
-              Drag & drop a PDF, or click to browse
+            <UploadCloud size={28} className={file ? 'text-emerald-400' : 'text-slate-400'} />
+            <span className="mt-2 text-xs font-semibold text-slate-200">
+              {file ? file.name : 'Click to select or drop a PDF document'}
             </span>
-            <span className="mt-2 text-sm text-slate-500">
-              PDF files only · max 50MB
+            <span className="text-[10px] text-slate-500 font-mono mt-0.5">
+              {file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : 'PDF files with extractable text'}
             </span>
 
             <input
               ref={fileInputRef}
-              id="pdf-upload"
+              id="pdf-file-input"
               type="file"
               accept="application/pdf"
               className="hidden"
-              onChange={handleFileChange}
+              onChange={(e) => selectFile(e.target.files?.[0] ?? null)}
             />
           </label>
 
-          {/* STATUS + ACTIONS */}
-          <div className="flex flex-col gap-2 text-slate-300 sm:flex-row sm:items-center sm:justify-between">
-            <p>{status}</p>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!file) {
-                    fileInputRef.current?.click()
-                    return
-                  }
-                  handleUpload()
-                }}
-                disabled={loading}
-                className="rounded-full bg-sky-500 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                {loading ? 'Uploading…' : 'Upload PDF'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setFile(null)
-                  setStatus('Choose a PDF to upload')
-                  setResult(null)
-                }}
-                className="rounded-full border border-slate-700 px-5 py-3 text-sm"
-              >
-                Reset
-              </button>
-            </div>
+          {/* Status Message */}
+          <div className="rounded border border-slate-800 bg-slate-950 p-2.5 text-[11px] font-mono text-slate-300 flex items-center justify-between">
+            <span className="truncate pr-2">{status}</span>
+            {loading && <Loader2 size={13} className="animate-spin text-sky-400 shrink-0" />}
           </div>
 
-          {/* RESULT */}
+          {/* Result details */}
           {result && (
-            <div className="rounded-3xl bg-slate-950/90 p-5 text-slate-200">
-              <p className="text-sm text-slate-400">Uploaded file</p>
-              <p className="mt-2 text-lg font-semibold text-white">
-                {result.filename}
-              </p>
-
-              <div className="mt-3 grid gap-2 text-sm text-slate-400 sm:grid-cols-3">
-                <span>{result.page_count} pages</span>
-                <span>{result.chunk_count} chunks</span>
-                <span>{result.text_length} chars</span>
+            <div
+              className={`rounded border p-3 text-xs font-mono ${
+                result.success
+                  ? 'border-emerald-800/60 bg-emerald-950/30 text-emerald-200'
+                  : 'border-rose-800/60 bg-rose-950/30 text-rose-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-bold">
+                {result.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                <span>{result.success ? 'Upload Success' : 'Upload Failed'}</span>
               </div>
+              <p className="mt-1 font-sans text-xs">{result.message}</p>
+              {result.success && (
+                <div className="mt-2 grid grid-cols-3 gap-1 border-t border-emerald-900/40 pt-2 text-[10px] text-slate-300">
+                  <span>Pages: {result.page_count ?? 0}</span>
+                  <span>Chunks: {result.chunk_count ?? 0}</span>
+                  <span>Length: {result.text_length ?? 0}</span>
+                </div>
+              )}
             </div>
           )}
 
+          {/* Action Footer */}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={reset}
+              disabled={loading}
+              className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!file) {
+                  fileInputRef.current?.click()
+                  return
+                }
+                void handleUpload()
+              }}
+              disabled={loading}
+              className="rounded bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+            >
+              {loading ? 'Processing...' : file ? 'Start Ingestion' : 'Select File'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

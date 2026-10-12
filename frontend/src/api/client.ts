@@ -1,95 +1,81 @@
 import axios from 'axios'
+import type {
+  ChatHistoryEntry,
+  ChatRequest,
+  ChatResponse,
+  DocumentDetail,
+  DocumentSummary,
+  HealthStatus,
+  UploadResponse,
+} from '../types/api'
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000',
 })
 
-export interface UploadResponse {
-  doc_id: string
-  filename: string
-  path: string
-  page_count: number
-  text_length: number
-  chunk_count: number
-  chunks: Array<{
-    page_number: number
-    chunk_index: number
-    text_length: number
-    embedding_length: number
-  }>
+export function getApiErrorMessage(error: unknown, fallback: string) {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail
+    if (typeof detail === 'string') return detail
+    if (typeof error.response?.data?.message === 'string') return error.response.data.message
+    if (error.code === 'ERR_NETWORK') return 'The backend is unavailable. Start the API and try again.'
+  }
+
+  return fallback
 }
 
-export interface ChatRequest {
-  session_id: string
-  question: string
-  doc_ids?: string[]
+export const getHealth = async () => {
+  const response = await api.get<HealthStatus>('/health')
+  return response.data
 }
 
-export interface ChatResponse {
-  answer: string
-  sources: Array<{
-    doc_id: string
-    filename?: string
-    page_number?: number
-    chunk_index?: number
-  }>
-  prompt?: string
-}
-
-export interface DocumentSummary {
-  doc_id: string
-  filename: string
-  page_numbers: number[]
-  chunk_count: number
-}
-
-export interface DocumentChunk {
-  doc_id: string
-  chunk_index: number
-  page_number: number
-  text: string
-  metadata: Record<string, unknown>
-}
-
-/**
- * Upload PDF (RAG ingestion)
- */
-export async function uploadPdf(file: File) {
+export const uploadPdf = async (file: File) => {
   const formData = new FormData()
   formData.append('file', file)
 
-  const response = await api.post<UploadResponse>(
-    '/upload/pdf',
-    formData
-  )
+  const response = await api.post<UploadResponse>('/upload/pdf', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 
   return response.data
 }
 
-/**
- * Chat with RAG system
- */
-export async function postChat(request: ChatRequest) {
+export const getDocuments = async () => {
+  const response = await api.get<{ documents: DocumentSummary[] }>('/documents/')
+  return response.data.documents
+}
+
+export const getDocumentDetail = async (docId: string) => {
+  const response = await api.get<DocumentDetail>(`/documents/${docId}`)
+  return response.data
+}
+
+export const postChat = async (request: ChatRequest) => {
   const response = await api.post<ChatResponse>('/chat/', request)
   return response.data
 }
 
-/**
- * Get all uploaded documents
- */
-export async function getDocuments() {
-  const response = await api.get<{ documents: DocumentSummary[] }>(
-    '/documents/'
-  )
-  return response.data.documents
+export const getHistory = async (sessionId: string) => {
+  const response = await api.get<ChatHistoryEntry[]>(`/history/${sessionId}`)
+  return response.data
 }
 
-/**
- * Get chunks for a document
- */
-export async function getDocumentChunks(docId: string) {
-  const response = await api.get<{ doc_id: string; chunks: DocumentChunk[] }>(
-    `/documents/${docId}`
-  )
+export const getSummary = async (docId: string) => {
+  const response = await api.get<{ doc_id: string; summary: string }>(`/summarize/${docId}`)
   return response.data
+}
+
+export const getRecentSessions = async () => {
+  const response = await api.get<Array<{ session_id: string; turn_count: number; last_active?: string }>>('/history/sessions/recent')
+  return response.data
+}
+
+export type {
+  ChatHistoryEntry,
+  ChatRequest,
+  ChatResponse,
+  DocumentDetail,
+  DocumentSummary,
+  HealthStatus,
+  UploadResponse,
 }

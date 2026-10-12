@@ -20,7 +20,9 @@ class ChatHistory(BaseModel):
     question: str
     answer: str
     sources: List[dict]
-    timestamp: str
+    timestamp: Optional[str] = None
+    created_at: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+        populate_by_name = True
